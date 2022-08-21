@@ -1,39 +1,44 @@
 package ua.com.cyberdone.notificationmicroservice.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.ClassPathResource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import org.thymeleaf.context.Context;
-import org.thymeleaf.spring5.SpringTemplateEngine;
-import ua.com.cyberdone.notificationmicroservice.model.Template;
+import ua.com.cyberdone.notificationmicroservice.exceptions.AttachmentException;
+import ua.com.cyberdone.notificationmicroservice.model.CyberdoneMail;
+import ua.com.cyberdone.notificationmicroservice.service.processors.TemplateProcessor;
 
 import javax.mail.MessagingException;
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.util.Map;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.springframework.mail.javamail.MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailSendingService {
 
     private final JavaMailSender emailSender;
-    private final SpringTemplateEngine templateEngine;
+    private final MailAttachmentProcessorService attachmentProcessorService;
+    private final Map<String, TemplateProcessor> processorMap;
 
-    public void sendMail(String emailReceiver, String title, Template templateType, Map<String, Object> variables) throws MessagingException {
+    public void sendMail(CyberdoneMail mail) throws MessagingException, AttachmentException, IOException {
         var message = emailSender.createMimeMessage();
-        var helper = new MimeMessageHelper(message, MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED, StandardCharsets.UTF_8.name());
-        helper.addAttachment("logo.png", new ClassPathResource("logo.png"));
 
-        var context = new Context();
-        context.setVariables(variables);
+        var mimeMessageHelper = new MimeMessageHelper(message, MULTIPART_MODE_MIXED_RELATED, UTF_8.name());
+        attachmentProcessorService.processAttachments(mimeMessageHelper, mail.getAttachmentUrls());
 
-        var html = templateEngine.process(templateType.getName(), context);
+        var html = processorMap.get(mail.getTemplateType().name())
+                .process(mail);
 
-        helper.setText(html, true);
-        helper.setSubject(title);
-        helper.setFrom("CyberDone");
-        helper.setTo(emailReceiver);
+        mimeMessageHelper.setText(html, true);
+        mimeMessageHelper.setSubject(mail.getTitle());
+        mimeMessageHelper.setFrom(mail.getCyberdoneServiceName());
+        mimeMessageHelper.setTo(mail.getReceiverEmail());
+        mimeMessageHelper.setPriority(mail.getPriority().getNumber());
 
         emailSender.send(message);
     }

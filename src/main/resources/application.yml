@@ -10,5 +10,13 @@ spring:
           auth: true
           starttls:
             enable: true
+  thymeleaf:
+    models:
+      suffix: .html
+      path: classpath:templates/
+    cache:
+      enabled: true
+      ttl:
+        ms: 60000 # 60 seconds
 
 
